@@ -1,0 +1,55 @@
+diff --git a/node_modules/react-native-pager-view/ios/PagerViewProvider.swift b/node_modules/react-native-pager-view/ios/PagerViewProvider.swift
+index aa9c374..ba9e2be 100644
+--- a/node_modules/react-native-pager-view/ios/PagerViewProvider.swift
++++ b/node_modules/react-native-pager-view/ios/PagerViewProvider.swift
+@@ -18,6 +18,41 @@
+   }
+ }
+ 
++/// `UIHostingController` makes SwiftUI install its `UIKitNavigationBarBridge`,
++/// which calls `-[UINavigationController setNavigationBarHidden:NO]` on the
++/// enclosing navigation controller whenever the hosting view appears
++/// (observed on iOS 15). When that navigation controller deliberately keeps its
++/// bar hidden — e.g. the one react-native-screens creates for `hasTwoStates`
++/// tab/drawer containers — the bridge re-shows an empty `UINavigationBar` that
++/// then swallows touches meant for the React Native views underneath.
++/// Preserve the previous visibility across the appearance callback.
++final class PagerHostingController<Content: View>: UIHostingController<Content> {
++  override func viewWillAppear(_ animated: Bool) {
++    let navigationController = enclosingNavigationController
++    let wasNavigationBarHidden = navigationController?.isNavigationBarHidden == true
++    super.viewWillAppear(animated)
++    if wasNavigationBarHidden {
++      navigationController?.setNavigationBarHidden(true, animated: false)
++    }
++  }
++
++  private var enclosingNavigationController: UINavigationController? {
++    if let navigationController {
++      return navigationController
++    }
++
++    var viewController: UIViewController? = self
++    while let current = viewController {
++      if let navigationController = current as? UINavigationController {
++        return navigationController
++      }
++      viewController = current.parent
++    }
++
++    return nil
++  }
++}
++
+ @objc public protocol PagerViewProviderDelegate {
+   func onPageScroll(data: OnPageScrollEventData)
+   func onPageScrollStateChanged(state: PageScrollState)
+@@ -222,7 +257,7 @@
+       return
+     }
+ 
+-    let hostingController = UIHostingController(
++    let hostingController = PagerHostingController(
+       rootView: PagerView(props: props, delegate: delegate)
+     )
+     self.hostingController = hostingController
